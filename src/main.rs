@@ -3,18 +3,25 @@ use std::fs;
 
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
 struct AppConfig {
-    apikey: String,
+    credentials : Credential,
+}
+
+#[derive(Debug, PartialEq, Serialize, Deserialize)]
+struct Credential {
+    username: String,
+    password: String,
+    client_id: String,
+    client_secret: String
 }
 
 #[allow(unused_variables)]
 fn main() {
     println!("Flume2Nats starting up...");
     println!("Reading config file");
-    // Config should be located in current directory, named config.yml
-    // a config file looks like:
-    // Read file into string
-    let config_from_file : Result<String, std::io::Error> = fs::read_to_string("config.yml"); 
-    let configstr = "---\napikey: test";
-    let cfg : Result<AppConfig,serde_yaml::Error> = serde_yaml::from_str(&configstr);
-    println!("{:?}",cfg);
+    let cfgfile = "config.yml";
+    let cfgstr = fs::read_to_string(cfgfile).expect("failed to read config");
+    let cfgr : Result<AppConfig, serde_yaml::Error> = serde_yaml::from_str(&cfgstr);
+    if let Ok(cfg) = cfgr {
+        println!("{:?}",cfg);
+    }
 }
