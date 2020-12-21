@@ -1,0 +1,5 @@
+credentials:
+  username: user@example.com
+  password: <password-here>
+  client_id: <clientid-here>
+  client_secret: <clientsecret-here>
