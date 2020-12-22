@@ -53,9 +53,13 @@ fn read_config() -> Result<AppConfig, Box<dyn Error>> {
 // Get an access/refresh token
 fn get_access_token(cred: &Credential) {
     let login_payload = cred_to_login(cred);
+    // create json string
+    let login_payload_str = serde_json::to_string(&login_payload).expect("Can't create payload json");
+    println!("{}",login_payload_str);
     let url = format!("{}{}", FLUME_API, "oauth/token");
     println!("{}", url);
-    let bodyres = reqwest::blocking::get(&url).expect("Req failed")
+    let client = reqwest::blocking::Client::new();
+    let bodyres = client.post(&url).header("content-type", "application/json").body(login_payload_str).send().expect("Req failed")
     .text().expect("convsion to text failed");
     println!("{}", bodyres);
 //    headers = {'content-type': 'application/json'}
