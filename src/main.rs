@@ -87,6 +87,7 @@ fn get_access_token(cred: &Credential) {
     println!("{:#?}", tok.refresh_token);
     println!("{:#?}", tok.expires_in);
     // What is the actual expiration time?
+    // Easier; lets just 
 }
 
 #[allow(unused_variables)]
