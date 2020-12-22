@@ -30,8 +30,22 @@ struct LoginPayload {
     password: String
 }
 
-// Cred to Login
-// Create login payload from creds
+// OauthReply
+#[derive(Debug, PartialEq, Serialize, Deserialize)]
+struct OauthReply {
+    success: bool,
+    data: Vec<AccessToken>,
+}
+// AccessToken
+#[derive(Debug, PartialEq, Serialize, Deserialize)]
+struct AccessToken {
+    token_type: String,
+    access_token: String,
+    expires_in: i64,
+    refresh_token: String
+}
+
+// Create login payload struct from creds struct
 fn cred_to_login(cred: &Credential) -> LoginPayload {
     return LoginPayload {
         grant_type: String::from("password"),
@@ -62,9 +76,10 @@ fn get_access_token(cred: &Credential) {
     let bodyres = client.post(&url).header("content-type", "application/json").body(login_payload_str).send().expect("Req failed")
     .text().expect("convsion to text failed");
     println!("{}", bodyres);
-//    headers = {'content-type': 'application/json'}
- //       flume_token_url = self.flume_api+ "oauth/token"
-  //      response_json = requests.request("POST", flume_token_url, data=payload_str, headers=headers)
+    let oauth_reply : OauthReply = serde_json::from_str(&bodyres).expect("Could not deserialize token");
+    println!("{:#?}", oauth_reply);
+    // body res is a JSON object with a data field that we want to serialize into an AccessToken
+    // object.
 }
 
 #[allow(unused_variables)]
