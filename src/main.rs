@@ -64,7 +64,7 @@ fn read_config() -> Result<AppConfig, Box<dyn Error>> {
     return Ok(cfgr?);
 }
 
-// Get an access/refresh token
+// Get an access/refresh token, by making an HTTP call to Flume
 fn get_access_token(cred: &Credential) {
     let login_payload = cred_to_login(cred);
     // create json string
@@ -80,6 +80,13 @@ fn get_access_token(cred: &Credential) {
     println!("{:#?}", oauth_reply);
     // body res is a JSON object with a data field that we want to serialize into an AccessToken
     // object.
+    // The first elem of the data field from the OAuth reply has what we need.
+    // todo - assert we have a single result, and that the response was successful
+    let tok = &oauth_reply.data[0];
+    println!("{:#?}", tok.access_token);
+    println!("{:#?}", tok.refresh_token);
+    println!("{:#?}", tok.expires_in);
+    // What is the actual expiration time?
 }
 
 #[allow(unused_variables)]
