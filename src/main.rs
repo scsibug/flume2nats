@@ -85,9 +85,6 @@ fn get_access_token(cred: &Credential) -> Option<AccessToken> {
     let bodyres = client.post(&url).header("content-type", "application/json").body(login_payload_str).send().expect("Req failed")
         .text().expect("conversion to text failed");
     let oauth_reply : OauthReply = serde_json::from_str(&bodyres).expect("Could not deserialize token");
-    // body res is a JSON object with a data field that we want to serialize into an AccessToken
-    // object.
-    // The first elem of the data field from the OAuth reply has what we need.
     // todo - assert we have a single result, and that the response was successful
     let tok = &oauth_reply.data[0];
     // Calculate expiration as epoch time
