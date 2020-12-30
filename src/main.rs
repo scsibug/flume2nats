@@ -132,6 +132,28 @@ fn get_user_id(tok: &AccessToken) -> Result<i64,Box<dyn Error>> {
     Ok(uid)
 }
 
+// For now, we just return the first readable device
+fn get_devices(tok: &AccessToken, userid: &i64) -> Result<String, Box<dyn Error>> {
+    // URL is flume api /users/{userid}/devices
+    let url = format!("{}users/{}/devices", FLUME_API, userid);
+    let client = reqwest::blocking::Client::new();
+    let bodyres = client.get(&url).header("Authorization", format!("Bearer {}",&tok.access_token))
+        .query(&[("user", "false"), ("location", "true")]).send().expect("Req failed")
+        .text().expect("conversion to text failed");
+    // "success" should be True
+    // "data" should contain an array of devices
+    // we want the device with "type": 2 (reader)
+    // and then we want its "id"
+    let parsed : serde_json::Value = serde_json::from_str(&bodyres)?;
+    let data = &parsed["data"].as_array().unwrap();
+    // Filter out items that have type=1
+    let filtered : Vec<&serde_json::Value>= data.iter().filter(|dev| dev["type"].as_i64().unwrap() == 1).collect();
+    // TODO: check that we have one item
+    let first_dev = filtered[0];
+    let devid = first_dev["id"].as_str().unwrap();  
+    return Ok(devid.to_string());
+}
+
 #[allow(unused_variables)]
 fn main() {
     println!("Flume2Nats starting up...");
@@ -148,5 +170,8 @@ fn main() {
     let user_id = get_user_id(&tok).expect("could not get userid");
     println!("UserID: {}", user_id);
 
+    // Get devices
+    let devid = get_devices(&tok, &user_id).expect("device not found");
+    println!("DevID: {}", devid);
 
 }
