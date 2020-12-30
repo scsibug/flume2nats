@@ -1,6 +1,8 @@
 use serde::{Serialize, Deserialize};
 use std::fs;
 use std::error::Error;
+use std::time::{SystemTime, UNIX_EPOCH};
+
 
 // Flume API
 static FLUME_API: &str = "https://api.flumewater.com/";
@@ -34,15 +36,22 @@ struct LoginPayload {
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
 struct OauthReply {
     success: bool,
-    data: Vec<AccessToken>,
+    data: Vec<AccessTokenData>,
 }
-// AccessToken
+// AccessToken data
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
-struct AccessToken {
+struct AccessTokenData {
     token_type: String,
     access_token: String,
     expires_in: i64,
-    refresh_token: String
+    refresh_token: String,
+}
+
+#[derive(Debug, PartialEq)]
+struct AccessToken {
+    access_token: String,
+    refresh_token: String,
+    expires_at: i64,
 }
 
 // Create login payload struct from creds struct
@@ -65,7 +74,7 @@ fn read_config() -> Result<AppConfig, Box<dyn Error>> {
 }
 
 // Get an access/refresh token, by making an HTTP call to Flume
-fn get_access_token(cred: &Credential) {
+fn get_access_token(cred: &Credential) -> Option<AccessToken> {
     let login_payload = cred_to_login(cred);
     // create json string
     let login_payload_str = serde_json::to_string(&login_payload).expect("Can't create payload json");
@@ -74,20 +83,18 @@ fn get_access_token(cred: &Credential) {
     println!("{}", url);
     let client = reqwest::blocking::Client::new();
     let bodyres = client.post(&url).header("content-type", "application/json").body(login_payload_str).send().expect("Req failed")
-    .text().expect("convsion to text failed");
-    println!("{}", bodyres);
+        .text().expect("conversion to text failed");
     let oauth_reply : OauthReply = serde_json::from_str(&bodyres).expect("Could not deserialize token");
-    println!("{:#?}", oauth_reply);
     // body res is a JSON object with a data field that we want to serialize into an AccessToken
     // object.
     // The first elem of the data field from the OAuth reply has what we need.
     // todo - assert we have a single result, and that the response was successful
     let tok = &oauth_reply.data[0];
-    println!("{:#?}", tok.access_token);
-    println!("{:#?}", tok.refresh_token);
-    println!("{:#?}", tok.expires_in);
-    // What is the actual expiration time?
-    // Easier; lets just 
+    // Calculate expiration as epoch time
+    let now = SystemTime::now().duration_since(UNIX_EPOCH).expect("could not get epoch time").as_secs() as i64;
+    let expire_at = now + tok.expires_in;
+    Some(AccessToken {access_token: tok.access_token.clone(),
+        expires_at: expire_at, refresh_token: tok.refresh_token.clone()})
 }
 
 #[allow(unused_variables)]
@@ -97,5 +104,7 @@ fn main() {
     let cfg = read_config().expect("Config could not be read"); 
     //println!("{:?}",cfg);
     // Attempt to get access & refresh tokens
-    get_access_token(&cfg.credentials);
+    let tok = get_access_token(&cfg.credentials).unwrap();
+    println!("{:#?}", tok);
+    // Now that we have a token, we can 
 }
