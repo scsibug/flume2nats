@@ -83,6 +83,7 @@ dependencies = [
 name = "flume2nats"
 version = "0.1.0"
 dependencies = [
+ "base64",
  "reqwest",
  "serde",
  "serde_json",

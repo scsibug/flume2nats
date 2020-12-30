@@ -2,7 +2,23 @@ use serde::{Serialize, Deserialize};
 use std::fs;
 use std::error::Error;
 use std::time::{SystemTime, UNIX_EPOCH};
+use std::fmt;
+use base64;
 
+#[derive(Debug)]
+pub enum FlumeError {
+  MissingClaimError,
+}
+
+impl std::error::Error for FlumeError {}
+
+impl fmt::Display for FlumeError {
+  fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    match self {
+      FlumeError::MissingClaimError => write!(f, "Missing Required Claim in JWT Error"),
+    }
+  }
+}
 
 // Flume API
 static FLUME_API: &str = "https://api.flumewater.com/";
@@ -54,6 +70,13 @@ struct AccessToken {
     expires_at: i64,
 }
 
+// Flume User
+#[derive(Debug, PartialEq, Serialize, Deserialize)]
+struct FlumeUser {
+    email: String,
+    id: String
+}
+
 // Create login payload struct from creds struct
 fn cred_to_login(cred: &Credential) -> LoginPayload {
     return LoginPayload {
@@ -78,9 +101,7 @@ fn get_access_token(cred: &Credential) -> Option<AccessToken> {
     let login_payload = cred_to_login(cred);
     // create json string
     let login_payload_str = serde_json::to_string(&login_payload).expect("Can't create payload json");
-    println!("{}",login_payload_str);
     let url = format!("{}{}", FLUME_API, "oauth/token");
-    println!("{}", url);
     let client = reqwest::blocking::Client::new();
     let bodyres = client.post(&url).header("content-type", "application/json").body(login_payload_str).send().expect("Req failed")
         .text().expect("conversion to text failed");
@@ -94,6 +115,23 @@ fn get_access_token(cred: &Credential) -> Option<AccessToken> {
         expires_at: expire_at, refresh_token: tok.refresh_token.clone()})
 }
 
+// The user ID is built-in to the access token
+fn get_user_id(tok: &AccessToken) -> Result<i64,Box<dyn Error>> {
+    let t = &tok.access_token;
+    // Break apart the JWT into header/claim/sig components 
+    let components: Vec<&str> = t.split('.').collect();
+    let claims_encoded = components[1];
+    // base64-decode the token
+    let decode = base64::decode(claims_encoded)?; //.expect("can't decode token"); 
+    let decstr = String::from_utf8_lossy(&decode);
+    // parse json
+    let parsed : serde_json::Value = serde_json::from_str(&decstr)?;
+    // Get the user_id number
+    let uid = parsed["user_id"].as_i64().unwrap();
+    //Err(Box::new(FlumeError::MissingClaimError)) 
+    Ok(uid)
+}
+
 #[allow(unused_variables)]
 fn main() {
     println!("Flume2Nats starting up...");
@@ -104,4 +142,11 @@ fn main() {
     let tok = get_access_token(&cfg.credentials).unwrap();
     println!("{:#?}", tok);
     // Now that we have a token, we can 
+    // make an API call.
+    
+    // First step is to get the user ID, we need this later.
+    let user_id = get_user_id(&tok).expect("could not get userid");
+    println!("UserID: {}", user_id);
+
+
 }
