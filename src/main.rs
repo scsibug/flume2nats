@@ -4,6 +4,7 @@ use std::error::Error;
 use std::time::{SystemTime, UNIX_EPOCH};
 use std::fmt;
 use base64;
+use chrono::{DateTime, Local, Duration};
 
 #[derive(Debug)]
 pub enum FlumeError {
@@ -22,6 +23,13 @@ impl fmt::Display for FlumeError {
 
 // Flume API
 static FLUME_API: &str = "https://api.flumewater.com/";
+
+// Usage Sample
+#[derive(Debug, PartialEq, Serialize, Deserialize)]
+struct UsageSample {
+    datetime: String,
+    gallons: f64,
+}
 
 // Application configuration data
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
@@ -133,6 +141,8 @@ fn get_user_id(tok: &AccessToken) -> Result<i64,Box<dyn Error>> {
 }
 
 // For now, we just return the first readable device
+// TODO: use the location["tz"] field from the data object to get the named timezone
+// ("America/Los_Angeles")
 fn get_devices(tok: &AccessToken, userid: &i64) -> Result<String, Box<dyn Error>> {
     // URL is flume api /users/{userid}/devices
     let url = format!("{}users/{}/devices", FLUME_API, userid);
@@ -146,12 +156,67 @@ fn get_devices(tok: &AccessToken, userid: &i64) -> Result<String, Box<dyn Error>
     // and then we want its "id"
     let parsed : serde_json::Value = serde_json::from_str(&bodyres)?;
     let data = &parsed["data"].as_array().unwrap();
-    // Filter out items that have type=1
-    let filtered : Vec<&serde_json::Value>= data.iter().filter(|dev| dev["type"].as_i64().unwrap() == 1).collect();
+    // filter out non-type-2 devices 
+    let filtered : Vec<&serde_json::Value>= data.iter().filter(|dev| dev["type"].as_i64().unwrap() == 2).collect();
     // TODO: check that we have one item
     let first_dev = filtered[0];
     let devid = first_dev["id"].as_str().unwrap();  
     return Ok(devid.to_string());
+}
+
+//fn to_usage(api_res: serde_json:Value) {
+
+//}
+
+fn get_current_usage(tok: &AccessToken, userid: &i64, deviceid: &String) {
+    println!("Getting current usage");
+    // get minute-by-minute usage for past 10 minutes 
+    // just assume that our timezone matches up with the device timezone for now. 
+    let url = format!("{}users/{}/devices/{}/query", FLUME_API, userid, deviceid); 
+    let client = reqwest::blocking::Client::new();
+//    let current_time = SystemTime::now();
+ //   let ten_min_ago = current_time - Duration::from_secs(60*10);
+  //  println!("{:#?} -> {:#?}", ten_min_ago, current_time);
+    let now: DateTime<Local> = Local::now();
+    let ten_min_ago = now - Duration::minutes(5);
+
+    println!("{:#?} -> {:#?}", ten_min_ago, now);
+    // Create ISO formatted date
+    let now_str = now.format("%Y-%m-%d %H:%M:%S");
+    let ten_min_ago_str = ten_min_ago.format("%Y-%m-%d %H:%M:%S");
+    let query = format!(r#"
+    {{
+      "queries": [
+        {{
+          "bucket": "MIN",
+          "since_datetime": "{}",
+          "until_datetime": "{}",
+          "request_id": "req-id"
+        }}
+      ]
+    }}
+    "#, ten_min_ago_str, now_str);
+    //println!("{}", query);
+//    let bodyres = client.post(&url).header("Authorization", format!("Bearer {}",&tok.access_token))
+//       .body(query).send().expect("Req failed")
+//        .text().expect("conversion to text failed");
+    let bodyres = client.post(&url).header("Authorization", format!("Bearer {}",&tok.access_token))
+        .header("content-type", "application/json")
+        .body(query).send().expect("req failed").text().expect("no response body");
+
+    //println!("{:#?}", bodyres);
+    // parse last 60 minutes 
+    let parsed : serde_json::Value = serde_json::from_str(&bodyres).expect("cannot parse json");
+    //println!("{:#?}", parsed);
+    // Create UsageSamples with datetime and gallons
+    let data = &parsed["data"];
+    //println!("{:#?}", data);
+    let qdata = &data[0]["req-id"].as_array().unwrap();
+    println!("{:#?}", qdata);
+    let usage : Vec<_> = qdata.iter().map(|x| UsageSample{gallons: x["value"].as_f64().unwrap(), datetime: x["datetime"].as_str().unwrap().to_string()}).collect();
+    println!("{:#?}", usage);
+//    let samples = qdata.as_array().map(|x| x["value"].as_f64().unwrap()).collect();
+
 }
 
 #[allow(unused_variables)]
@@ -174,4 +239,8 @@ fn main() {
     let devid = get_devices(&tok, &user_id).expect("device not found");
     println!("DevID: {}", devid);
 
+    // Now with the user and device ID, we can query for usage.
+    get_current_usage(&tok, &user_id, &devid);
+
+    println!("DevID: {}", devid);
 }
