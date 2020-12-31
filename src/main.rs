@@ -4,7 +4,7 @@ use std::error::Error;
 use std::time::{SystemTime, UNIX_EPOCH};
 use std::fmt;
 use base64;
-use chrono::{DateTime, Local, Duration};
+use chrono::{Local, Duration};
 
 #[derive(Debug)]
 pub enum FlumeError {
@@ -168,22 +168,16 @@ fn get_devices(tok: &AccessToken, userid: &i64) -> Result<String, Box<dyn Error>
 
 //}
 
-fn get_current_usage(tok: &AccessToken, userid: &i64, deviceid: &String) {
+fn get_current_usage(tok: &AccessToken, userid: &i64, deviceid: &String) -> Vec<UsageSample> {
     println!("Getting current usage");
-    // get minute-by-minute usage for past 10 minutes 
     // just assume that our timezone matches up with the device timezone for now. 
     let url = format!("{}users/{}/devices/{}/query", FLUME_API, userid, deviceid); 
     let client = reqwest::blocking::Client::new();
-//    let current_time = SystemTime::now();
- //   let ten_min_ago = current_time - Duration::from_secs(60*10);
-  //  println!("{:#?} -> {:#?}", ten_min_ago, current_time);
-    let now: DateTime<Local> = Local::now();
-    let ten_min_ago = now - Duration::minutes(5);
-
-    println!("{:#?} -> {:#?}", ten_min_ago, now);
+    let now = Local::now();
+    let hour_ago = now - Duration::hours(1);
     // Create ISO formatted date
     let now_str = now.format("%Y-%m-%d %H:%M:%S");
-    let ten_min_ago_str = ten_min_ago.format("%Y-%m-%d %H:%M:%S");
+    let hour_ago_str = hour_ago.format("%Y-%m-%d %H:%M:%S");
     let query = format!(r#"
     {{
       "queries": [
@@ -195,28 +189,28 @@ fn get_current_usage(tok: &AccessToken, userid: &i64, deviceid: &String) {
         }}
       ]
     }}
-    "#, ten_min_ago_str, now_str);
-    //println!("{}", query);
-//    let bodyres = client.post(&url).header("Authorization", format!("Bearer {}",&tok.access_token))
-//       .body(query).send().expect("Req failed")
-//        .text().expect("conversion to text failed");
+    "#, hour_ago_str, now_str);
     let bodyres = client.post(&url).header("Authorization", format!("Bearer {}",&tok.access_token))
         .header("content-type", "application/json")
-        .body(query).send().expect("req failed").text().expect("no response body");
-
-    //println!("{:#?}", bodyres);
-    // parse last 60 minutes 
-    let parsed : serde_json::Value = serde_json::from_str(&bodyres).expect("cannot parse json");
-    //println!("{:#?}", parsed);
+        .body(query)
+        .send()
+        .expect("req failed")
+        .text()
+        .expect("no response body");
+    let parsed : serde_json::Value = serde_json::from_str(&bodyres)
+        .expect("cannot parse json");
     // Create UsageSamples with datetime and gallons
     let data = &parsed["data"];
-    //println!("{:#?}", data);
-    let qdata = &data[0]["req-id"].as_array().unwrap();
-    println!("{:#?}", qdata);
-    let usage : Vec<_> = qdata.iter().map(|x| UsageSample{gallons: x["value"].as_f64().unwrap(), datetime: x["datetime"].as_str().unwrap().to_string()}).collect();
-    println!("{:#?}", usage);
-//    let samples = qdata.as_array().map(|x| x["value"].as_f64().unwrap()).collect();
-
+    let qdata = &data[0]["req-id"]
+        .as_array()
+        .unwrap();
+    let usage : Vec<UsageSample> = qdata.iter()
+        .map(|x| UsageSample{
+            gallons: x["value"].as_f64().unwrap(), 
+            datetime: x["datetime"].as_str().unwrap().to_string()
+        })
+        .collect();
+    usage
 }
 
 #[allow(unused_variables)]
@@ -228,8 +222,6 @@ fn main() {
     // Attempt to get access & refresh tokens
     let tok = get_access_token(&cfg.credentials).unwrap();
     println!("{:#?}", tok);
-    // Now that we have a token, we can 
-    // make an API call.
     
     // First step is to get the user ID, we need this later.
     let user_id = get_user_id(&tok).expect("could not get userid");
@@ -240,7 +232,8 @@ fn main() {
     println!("DevID: {}", devid);
 
     // Now with the user and device ID, we can query for usage.
-    get_current_usage(&tok, &user_id, &devid);
+    let usage = get_current_usage(&tok, &user_id, &devid);
+
 
     println!("DevID: {}", devid);
 }
